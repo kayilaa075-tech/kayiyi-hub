@@ -103,27 +103,26 @@ local function GetPlayerTools()
     return tools
 end
 
-local function EquipTool(ToolName, Hotkey)
+-- MENGGUNAKAN REMOTE SETEQUIPPEDITEM (BUKAN PENCET TOMBOL LAGI)
+local function EquipTool(ToolName, SlotNumber)
     if ToolName == "" or ToolName == "Tidak ada senjata" then return nil end
-    local tool = nil
-    local backpack = LocalPlayer:FindFirstChild("Backpack")
     local character = LocalPlayer.Character
-    local humanoid = character and character:FindFirstChild("Humanoid")
+    if not character then return nil end
 
+    local currentTool = character:FindFirstChild(ToolName)
+    if currentTool then return currentTool end
+    
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
     if backpack and backpack:FindFirstChild(ToolName) then
-        tool = backpack:FindFirstChild(ToolName)
-        if humanoid then humanoid:EquipTool(tool) end
-    elseif character and character:FindFirstChild(ToolName) then
-        tool = character:FindFirstChild(ToolName)
+        pcall(function()
+            game:GetService("ReplicatedStorage").Shared.DataStreams.SetEquippedItem:InvokeServer(SlotNumber)
+        end)
+        task.wait(0.2) 
+        
+        return character:FindFirstChild(ToolName)
     end
     
-    if not tool and character and humanoid and humanoid.Health > 0 then
-        VirtualInputManager:SendKeyEvent(true, Hotkey, false, game)
-        task.wait(0.1)
-        VirtualInputManager:SendKeyEvent(false, Hotkey, false, game)
-        task.wait(0.5) 
-    end
-    return tool
+    return nil
 end
 
 local function SellEverything()
@@ -382,7 +381,8 @@ task.spawn(function()
                         CurrentTarget = GetClosestMob()
                     end
                     if CurrentTarget then
-                        local toolToUse = EquipTool(SelectedWeapon, Enum.KeyCode.Two)
+                        -- MENGGUNAKAN SLOT 2 UNTUK SPEAR
+                        local toolToUse = EquipTool(SelectedWeapon, 2)
                         if toolToUse then
                             -- Ambil model monsternya (karena CurrentTarget adalah Hitbox)
                             local mobModel = CurrentTarget.Parent
@@ -466,13 +466,21 @@ task.spawn(function()
                 end
                 
                 if isBackpackFull and AutoSellEnabled then
+                    -- MENGGUNAKAN REMOTE UNEQUIP
+                    local currentTool = character:FindFirstChildWhichIsA("Tool")
+                    if currentTool then
+                        pcall(function()
+                            game:GetService("ReplicatedStorage").Shared.DataStreams.UnequipTool:InvokeServer(currentTool)
+                        end)
+                    end
+
                     SellEverything()
-                    humanoid:UnequipTools()
                     task.wait(1.5) 
                     continue 
                 end
 
-                local rod = EquipTool(SelectedRod, Enum.KeyCode.One)
+                -- MENGGUNAKAN SLOT 1 UNTUK PANCINGAN
+                local rod = EquipTool(SelectedRod, 1)
                 if not rod then 
                     task.wait(1) 
                     continue 
