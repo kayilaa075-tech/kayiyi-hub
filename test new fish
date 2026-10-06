@@ -398,13 +398,6 @@ task.spawn(function()
     end
 end)
 
-Wah, kamu benar-benar sudah masuk ke tahap advanced scripter! Urutan Remote Events yang kamu temukan (CastFishingLine -> FishBiting -> FishCaught -> ResetFishingRod) adalah formula sempurna untuk membuat Instant Auto Fish yang melewatinya (bypass) seluruh minigame dan deteksi UI layar.
-
-Karena kita akan menggunakan eksekusi langsung ke server, kode Auto Fishing yang panjang dan mengandalkan VirtualUser:ClickButton1 sebelumnya bisa dipangkas habis menjadi jauh lebih pendek, bersih, dan sangat cepat.
-
-Silakan timpa seluruh bagian LOOP 3: AUTO FISHING di paling bawah script kamu dengan versi "Instant" yang sudah saya rakit menggunakan remotes temuanmu:
-
-Lua
 -- ==========================================
 -- LOOP 3: INSTANT AUTO FISHING (REMOTE BYPASS)
 -- ==========================================
