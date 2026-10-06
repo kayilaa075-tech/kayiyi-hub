@@ -399,7 +399,7 @@ task.spawn(function()
 end)
 
 -- ==========================================
--- LOOP 3: INSTANT AUTO FISHING (REMOTE BYPASS)
+-- LOOP 3: AUTO FISHING (HYBRID INSTANT MINIGAME)
 -- ==========================================
 task.spawn(function()
     while task.wait() do
@@ -409,6 +409,7 @@ task.spawn(function()
         if AutoFishEnabled then
             local character = LocalPlayer.Character
             local humanoid = character and character:FindFirstChild("Humanoid")
+            local hrp = character and character:FindFirstChild("HumanoidRootPart")
             
             if character and humanoid and humanoid.Health > 0 then
                 local gui = LocalPlayer:FindFirstChild("PlayerGui")
@@ -439,46 +440,89 @@ task.spawn(function()
                     continue 
                 end
 
-                -- Pastikan pancingan ter-equip
                 local rod = EquipTool(SelectedRod, Enum.KeyCode.One)
                 if not rod then 
                     task.wait(1) 
                     continue 
                 end
 
-                -- ==========================================
-                -- EKSEKUSI REMOTE INSTANT FISHING
-                -- ==========================================
-                pcall(function()
-                    local DataStreams = game:GetService("ReplicatedStorage").Shared.DataStreams
+                local bobber = rod:FindFirstChild("Bobber")
+                local fishingUI = interface and interface:FindFirstChild("Fishing")
+                local fishingMeter = fishingUI and fishingUI:FindFirstChild("FishingMeter")
+
+                -- FASE 3: Minigame Berlangsung (BYPASS DENGAN REMOTE)
+                if fishingMeter and fishingMeter.Visible then
+                    pcall(function()
+                        local DataStreams = game:GetService("ReplicatedStorage").Shared.DataStreams
+                        
+                        -- Eksekusi duplikasi FishBiting sesuai analisismu
+                        if DataStreams:FindFirstChild("FishBiting") then
+                            DataStreams.FishBiting:InvokeServer() 
+                        end
+                        
+                        -- Langsung klaim ikannya tanpa main minigame
+                        if DataStreams:FindFirstChild("FishCaught") then
+                            DataStreams.FishCaught:FireServer()
+                        end
+                    end)
                     
-                    -- 1. Lempar Pancingan
-                    if DataStreams:FindFirstChild("CastFishingLine") then
-                        DataStreams.CastFishingLine:FireServer()
-                    end
-                    task.wait(0.5) -- Jeda animasi agar tidak terdeteksi spam
+                    task.wait(0.5) -- Beri jeda agar server memproses dan UI menghilang
+                    continue
+                end
+
+                -- FASE 1 & 2: Melempar Umpan & Menunggu Ikan (Logika Normal & Filter)
+                if bobber then
+                    local hookedFish = bobber:FindFirstChild("HookedFish")
                     
-                    -- 2. Trigger Ikan Menyambar
-                    if DataStreams:FindFirstChild("FishBiting") then
-                        -- Perhatikan: Ini InvokeServer karena berbentuk RemoteFunction
-                        DataStreams.FishBiting:InvokeServer() 
+                    if hookedFish and hookedFish.Value ~= nil then
+                        local currentFishName = ""
+                        if typeof(hookedFish.Value) == "Instance" then
+                            currentFishName = hookedFish.Value.Name
+                        else
+                            currentFishName = tostring(hookedFish.Value)
+                        end
+                        
+                        local shouldCatch = true
+                        
+                        -- Filter Ikan Berfungsi Kembali
+                        if FishFilterEnabled and #TargetFishList > 0 then
+                            shouldCatch = false
+                            local lowerCurrentFish = string.lower(currentFishName)
+                            
+                            for _, targetFish in ipairs(TargetFishList) do
+                                if string.find(lowerCurrentFish, string.lower(targetFish)) then
+                                    shouldCatch = true
+                                    break
+                                end
+                            end
+                        end
+                        
+                        if shouldCatch then
+                            rod:Activate()
+                            local viewportSize = workspace.CurrentCamera.ViewportSize
+                            VirtualUser:ClickButton1(Vector2.new(viewportSize.X / 2, viewportSize.Y / 2))
+                            task.wait(1) -- Beri waktu agar UI Minigame muncul
+                        else
+                            task.wait(0.5) -- Ikan jelek, biarkan lepas
+                        end
+                        
+                    else
+                        local dist = hrp and (bobber.Position - hrp.Position).Magnitude or 15
+                        if dist < 10 then
+                            rod:Activate()
+                            local viewportSize = workspace.CurrentCamera.ViewportSize
+                            VirtualUser:ClickButton1(Vector2.new(viewportSize.X / 2, viewportSize.Y / 2))
+                            task.wait(2.5) 
+                        else
+                            task.wait(0.1)
+                        end
                     end
-                    task.wait(0.5) 
-                    
-                    -- 3. Tangkap Ikan Instan (Bypass Minigame Mover)
-                    if DataStreams:FindFirstChild("FishCaught") then
-                        DataStreams.FishCaught:FireServer()
-                    end
-                    task.wait(0.5) 
-                    
-                    -- 4. Reset Status Pancingan agar bisa melempar lagi
-                    if DataStreams:FindFirstChild("ResetFishingRod") then
-                        DataStreams.ResetFishingRod:FireServer(rod)
-                    end
-                end)
-                
-                -- Cooldown aman antar tarikan (bisa kamu perkecil kalau mau super cepat, misal 0.5)
-                task.wait(1)
+                else
+                    rod:Activate()
+                    local viewportSize = workspace.CurrentCamera.ViewportSize
+                    VirtualUser:ClickButton1(Vector2.new(viewportSize.X / 2, viewportSize.Y / 2))
+                    task.wait(1.5)
+                end
             else
                 task.wait(1) 
             end
