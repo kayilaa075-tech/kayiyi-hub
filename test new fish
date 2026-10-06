@@ -103,27 +103,23 @@ local function GetPlayerTools()
     return tools
 end
 
--- MENGGUNAKAN REMOTE SETEQUIPPEDITEM (BUKAN PENCET TOMBOL LAGI)
+-- EQUIP MENGGUNAKAN REMOTE (Tanpa pengecekan tas lokal)
 local function EquipTool(ToolName, SlotNumber)
     if ToolName == "" or ToolName == "Tidak ada senjata" then return nil end
     local character = LocalPlayer.Character
     if not character then return nil end
 
-    -- Kalau sudah ada di tangan, langsung pakai
+    -- Cek jika sudah dipegang
     local currentTool = character:FindFirstChild(ToolName)
     if currentTool then return currentTool end
     
-    -- LANGSUNG TEMBAK REMOTE TANPA BANYAK SYARAT
+    -- Tembak Remote SetEquippedItem
     pcall(function()
         game:GetService("ReplicatedStorage").Shared.DataStreams.SetEquippedItem:InvokeServer(SlotNumber)
     end)
-    
-    task.wait(0.3) -- Beri waktu sedikit agar server memunculkan tool-nya di tangan karakter
+    task.wait(0.3) -- Jeda agar server merespons
     
     return character:FindFirstChild(ToolName)
-end
-    
-    return nil
 end
 
 local function SellEverything()
@@ -254,7 +250,7 @@ FishTab:CreateDropdown({
 })
 
 -- ==========================================
--- LOOP 1: AUTO COLLECT CHEST (Prioritas Utama & Return Posisi)
+-- LOOP 1: AUTO COLLECT CHEST (Return Posisi & Kamera)
 -- ==========================================
 local SavedPosition = nil
 local SavedCameraCFrame = nil
@@ -263,24 +259,21 @@ task.spawn(function()
     while task.wait(0.5) do
         local chestHRP, chestPrompt = nil, nil
         
-        -- Cek Ship Chest dulu
         if AutoChestEnabled then
             chestHRP, chestPrompt = GetShipChest()
         end
         
-        -- Kalau Ship Chest tidak ada, cek Abandoned Chest
         if not chestHRP and AutoChest2Enabled then
             chestHRP, chestPrompt = GetAbandonedChest()
         end
         
-        -- Jika salah satu chest ditemukan
         if chestHRP and chestPrompt then
             local character = LocalPlayer.Character
             local hrp = character and character:FindFirstChild("HumanoidRootPart")
             local camera = workspace.CurrentCamera
             
             if hrp then
-                -- Simpan posisi dan kamera HANYA jika ini teleportasi pertama (belum sedang collect)
+                -- Simpan CFrame sebelum teleportasi
                 if not IsCollectingChest then
                     SavedPosition = hrp.CFrame
                     SavedCameraCFrame = camera.CFrame
@@ -288,7 +281,6 @@ task.spawn(function()
                 
                 IsCollectingChest = true 
                 
-                -- Teleport ke atas chest
                 hrp.CFrame = chestHRP.CFrame + Vector3.new(0, 3, 0)
                 hrp.Velocity = Vector3.new(0,0,0)
                 
@@ -301,27 +293,24 @@ task.spawn(function()
                     chestPrompt:InputHoldEnd()
                 end
                 
-                task.wait(1) -- Beri waktu agar server memproses pengambilan chest
+                task.wait(1) 
             end
         else
-            -- Jika sebelumnya sedang mengambil chest, tapi sekarang chest sudah hilang (diambil)
+            -- Kembalikan posisi jika chest selesai diambil
             if IsCollectingChest and SavedPosition then
                 local character = LocalPlayer.Character
                 local hrp = character and character:FindFirstChild("HumanoidRootPart")
                 local camera = workspace.CurrentCamera
                 
                 if hrp then
-                    -- Kembalikan ke posisi awal
                     hrp.CFrame = SavedPosition
                     hrp.Velocity = Vector3.new(0,0,0)
                     
-                    -- Kembalikan arah kamera awal
                     if SavedCameraCFrame then
                         camera.CFrame = SavedCameraCFrame
                     end
                 end
                 
-                -- Bersihkan memori posisi
                 SavedPosition = nil
                 SavedCameraCFrame = nil
             end
@@ -332,7 +321,7 @@ task.spawn(function()
 end)
 
 -- ==========================================
--- LOOP 2: AUTO KILL (SILENT AIM / REMOTE HIT)
+-- LOOP 2: AUTO KILL
 -- ==========================================
 RunService.Heartbeat:Connect(function()
     if AutoKillEnabled and not IsCollectingChest then
@@ -346,7 +335,6 @@ RunService.Heartbeat:Connect(function()
                 hrp.Velocity = Vector3.new(0,0,0)
             elseif CurrentTarget and CurrentTarget.Parent then
                 local targetPos = CurrentTarget.Position
-                -- Teleport ke dekat monster (opsional, tapi bagus agar radius hit masuk akal)
                 hrp.CFrame = CFrame.lookAt(targetPos + Vector3.new(0, 15, 35), targetPos)
                 hrp.Velocity = Vector3.new(0,0,0) 
             end
@@ -382,17 +370,15 @@ task.spawn(function()
                         CurrentTarget = GetClosestMob()
                     end
                     if CurrentTarget then
-                        -- MENGGUNAKAN SLOT 2 UNTUK SPEAR
+                        -- Equip menggunakan Slot 2
                         local toolToUse = EquipTool(SelectedWeapon, 2)
                         if toolToUse then
-                            -- Ambil model monsternya (karena CurrentTarget adalah Hitbox)
                             local mobModel = CurrentTarget.Parent
                             
                             if mobModel then
                                 pcall(function()
                                     local DataStreams = game:GetService("ReplicatedStorage").Shared.DataStreams
                                     
-                                    -- 1. Tembakkan Remote Lempar (Menipu sistem anti-cheat agar terlihat lempar betulan)
                                     if DataStreams:FindFirstChild("SpearThrown") then
                                         DataStreams.SpearThrown:FireServer(
                                             toolToUse.Name, 
@@ -402,7 +388,6 @@ task.spawn(function()
                                         )
                                     end
                                     
-                                    -- 2. Tembakkan Remote Hit (Instan Kill Aura)
                                     if DataStreams:FindFirstChild("MonsterHit") then
                                         DataStreams.MonsterHit:FireServer(
                                             mobModel, 
@@ -412,7 +397,7 @@ task.spawn(function()
                                     end
                                 end)
                             end
-                            task.wait(1.2) -- Jeda tebasan (atur jadi 0.05 jika ingin lebih brutal)
+                            task.wait(1.2) 
                         else
                             task.wait(0.5)
                         end
@@ -465,8 +450,9 @@ task.spawn(function()
                         end
                     end
                 end
-
+                
                 if isBackpackFull and AutoSellEnabled then
+                    -- Unequip via Remote sebelum sell
                     local currentTool = character:FindFirstChildWhichIsA("Tool")
                     if currentTool then
                         pcall(function()
@@ -480,7 +466,7 @@ task.spawn(function()
                     continue 
                 end
 
-                -- MENGGUNAKAN SLOT 1 UNTUK PANCINGAN
+                -- Equip menggunakan Slot 1
                 local rod = EquipTool(SelectedRod, 1)
                 if not rod then 
                     task.wait(1) 
