@@ -1,0 +1,496 @@
+-- ==========================================
+-- 🎨 PENGATURAN WARNA UI (UBAH SESUKA HATI)
+-- ==========================================
+local WarnaTeks   = Color3.fromRGB(200, 90, 130)   
+local WarnaLatar  = Color3.fromRGB(255, 240, 245)  
+local WarnaElemen = Color3.fromRGB(255, 220, 235)  
+local WarnaAksen  = Color3.fromRGB(255, 140, 170)  
+
+-- ==========================================
+-- PENGATURAN KEAMANAN & INISIALISASI
+-- ==========================================
+if getgenv then
+    getgenv().DISABLE_RAYFIELD_REQUESTS = true
+end
+
+task.wait(5)
+repeat task.wait() until game:IsLoaded()
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local VirtualUser = game:GetService("VirtualUser")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local LocalPlayer = Players.LocalPlayer
+
+local Rayfield = loadstring(game:HttpGet('https://raw.githubusercontent.com/kayilaa075-tech/kayiyi-hub/main/Kayiyi%20Hub'))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "Kayyi Hub | Fishing Simulator",
+    LoadingTitle = "Kayyi Hub",
+    LoadingSubtitle = "Auto Farm, Fish & Chest",
+    ShowText = "Kayyi Hub",
+    Icon = 0,
+    ConfigurationSaving = { Enabled = false },
+    Discord = { Enabled = false },
+    KeySystem = false,
+    Theme = {
+        TextColor = WarnaTeks, Background = WarnaLatar, Topbar = WarnaElemen,
+        Shadow = WarnaElemen, NotificationBackground = WarnaLatar,
+        NotificationActionsBackground = WarnaElemen, TabBackground = WarnaElemen,
+        TabStroke = WarnaElemen, TabBackgroundSelected = WarnaAksen,
+        TabTextColor = WarnaTeks, SelectedTabTextColor = Color3.fromRGB(255, 255, 255), 
+        ElementBackground = WarnaElemen, ElementBackgroundHover = WarnaAksen,
+        SecondaryElementBackground = WarnaLatar, ElementStroke = WarnaElemen,
+        SecondaryElementStroke = WarnaElemen, SliderBackground = WarnaElemen,
+        SliderProgress = WarnaAksen, SliderStroke = WarnaElemen,
+        ToggleBackground = WarnaElemen, ToggleEnabled = WarnaAksen,
+        ToggleDisabled = WarnaElemen, ToggleEnabledStroke = WarnaAksen,
+        ToggleDisabledStroke = WarnaElemen, ToggleEnabledOuterStroke = WarnaAksen,
+        ToggleDisabledOuterStroke = WarnaElemen, DropdownSelected = WarnaAksen,
+        DropdownUnselected = WarnaElemen, InputBackground = WarnaElemen,
+        InputStroke = WarnaAksen, PlaceholderColor = WarnaTeks
+    }
+})
+
+-- ==========================================
+-- VARIABEL GLOBAL
+-- ==========================================
+local AutoKillEnabled = false
+local AutoSellEnabled = false
+local AntiAFKEnabled = true 
+local SelectedWeapon = ""
+
+local AutoFishEnabled = false
+local SelectedRod = ""
+local FishFilterEnabled = false
+local TargetFishList = {}
+
+local AutoChestEnabled = false
+local AutoChest2Enabled = false
+local IsCollectingChest = false -- Penahan fitur lain (Prioritas Utama)
+
+local CurrentTarget = nil
+local CurrentDrop = nil
+
+-- ==========================================
+-- LOGIKA ANTI-AFK BAWAAN
+-- ==========================================
+LocalPlayer.Idled:Connect(function()
+    if AntiAFKEnabled then
+        VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+        task.wait(0.1)
+        VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+    end
+end)
+
+-- ==========================================
+-- FUNGSI PENDUKUNG
+-- ==========================================
+local function GetPlayerTools()
+    local tools = {}
+    if LocalPlayer:FindFirstChild("Backpack") then
+        for _, item in pairs(LocalPlayer.Backpack:GetChildren()) do
+            if item:IsA("Tool") then table.insert(tools, item.Name) end
+        end
+    end
+    if LocalPlayer.Character then
+        for _, item in pairs(LocalPlayer.Character:GetChildren()) do
+            if item:IsA("Tool") then table.insert(tools, item.Name) end
+        end
+    end
+    if #tools == 0 then table.insert(tools, "Tidak ada senjata") end
+    return tools
+end
+
+local function EquipTool(ToolName, Hotkey)
+    if ToolName == "" or ToolName == "Tidak ada senjata" then return nil end
+    local tool = nil
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChild("Humanoid")
+
+    if backpack and backpack:FindFirstChild(ToolName) then
+        tool = backpack:FindFirstChild(ToolName)
+        if humanoid then humanoid:EquipTool(tool) end
+    elseif character and character:FindFirstChild(ToolName) then
+        tool = character:FindFirstChild(ToolName)
+    end
+    
+    if not tool and character and humanoid and humanoid.Health > 0 then
+        VirtualInputManager:SendKeyEvent(true, Hotkey, false, game)
+        task.wait(0.1)
+        VirtualInputManager:SendKeyEvent(false, Hotkey, false, game)
+        task.wait(0.5) 
+    end
+    return tool
+end
+
+local function SellEverything()
+    pcall(function()
+        game:GetService("ReplicatedStorage").Shared.DataStreams.processGameItemSold:InvokeServer("SellEverything")
+    end)
+end
+
+local function GetClosestDrop()
+    local drops = Workspace:FindFirstChild("DroppedItems")
+    if drops then
+        for _, item in pairs(drops:GetChildren()) do
+            if item:IsA("BasePart") then return item
+            elseif item:IsA("Model") then
+                local part = item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart")
+                if part then return part end
+            end
+        end
+    end
+    return nil
+end
+
+local function GetClosestMob()
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    local targetNeon, targetNormal = nil, nil
+    local distNeon, distNormal = math.huge, math.huge
+
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj:FindFirstChild("Hitbox") and not obj:FindFirstChild("Humanoid") then
+            local hitbox = obj:FindFirstChild("Hitbox")
+            if not hitbox.Anchored or hitbox.AssemblyLinearVelocity.Magnitude > 0.5 then
+                local distance = (hrp.Position - hitbox.Position).Magnitude
+                local isNeon = false
+                
+                for _, part in pairs(obj:GetDescendants()) do
+                    if part:IsA("BasePart") and part.Name ~= "Hitbox" and part.Material == Enum.Material.Neon then
+                        isNeon = true
+                        break 
+                    end
+                end
+                
+                if isNeon then
+                    if distance < distNeon then distNeon = distance; targetNeon = hitbox end
+                else
+                    if distance < distNormal then distNormal = distance; targetNormal = hitbox end
+                end
+            end
+        end
+    end
+    return targetNeon or targetNormal
+end
+
+local function GetShipChest()
+    for _, obj in pairs(Workspace:GetChildren()) do
+        if obj:IsA("Model") and string.find(obj.Name, "ShipModel") then
+            for _, child in pairs(obj:GetChildren()) do
+                if child:IsA("Model") and string.find(child.Name, "Chest_") then
+                    local hrp = child:FindFirstChild("HumanoidRootPart")
+                    if hrp then
+                        local prompt = hrp:FindFirstChildWhichIsA("ProximityPrompt")
+                        if prompt then return hrp, prompt end
+                    end
+                end
+            end
+        end
+    end
+    return nil, nil
+end
+
+local function GetAbandonedChest()
+    for _, obj in pairs(Workspace:GetChildren()) do
+        if obj:IsA("Model") and string.find(obj.Name, "AbandonedContainers") then
+            for _, child in pairs(obj:GetChildren()) do
+                if child:IsA("Model") and string.find(child.Name, "Chest_") then
+                    local hrp = child:FindFirstChild("HumanoidRootPart")
+                    if hrp then
+                        local prompt = hrp:FindFirstChildWhichIsA("ProximityPrompt")
+                        if prompt then return hrp, prompt end
+                    end
+                end
+            end
+        end
+    end
+    return nil, nil
+end
+
+-- ==========================================
+-- MENU 1: AUTO FARM & CHEST
+-- ==========================================
+local MainTab = Window:CreateTab("Auto Farm")
+MainTab:CreateSection("Weapon Settings")
+local WeaponDropdown = MainTab:CreateDropdown({
+    Name = "Kill With (Pilih Senjata/Spear)", Options = GetPlayerTools(), CurrentOption = {"Tidak ada senjata"}, MultipleOptions = false, Flag = "WeaponSelect", Callback = function(Options) SelectedWeapon = Options[1] end,
+})
+MainTab:CreateButton({ Name = "Refresh Daftar Senjata", Callback = function() WeaponDropdown:Refresh(GetPlayerTools(), true) end })
+
+MainTab:CreateSection("Auto Chest Settings (Prioritas)")
+MainTab:CreateToggle({ Name = "Auto Collect Ship Chest", CurrentValue = false, Flag = "AutoChest", Callback = function(Value) AutoChestEnabled = Value end })
+MainTab:CreateToggle({ Name = "Auto Collect Abandoned Chest", CurrentValue = false, Flag = "AutoChest2", Callback = function(Value) AutoChest2Enabled = Value end })
+
+MainTab:CreateSection("Auto Farm Settings")
+MainTab:CreateToggle({ Name = "Anti-AFK (Cegah Kick 20 Menit)", CurrentValue = true, Flag = "AntiAFK", Callback = function(Value) AntiAFKEnabled = Value end })
+MainTab:CreateToggle({ Name = "Auto Kill Mob", CurrentValue = false, Flag = "AutoKill", Callback = function(Value) AutoKillEnabled = Value end })
+MainTab:CreateToggle({ Name = "Auto Sell All (Bila Tas Penuh)", CurrentValue = false, Flag = "AutoSell", Callback = function(Value) AutoSellEnabled = Value end })
+
+-- ==========================================
+-- MENU 2: AUTO FISHING
+-- ==========================================
+local FishTab = Window:CreateTab("Auto Fishing")
+FishTab:CreateSection("Rod Settings")
+local RodDropdown = FishTab:CreateDropdown({
+    Name = "Fish With (Pilih Pancingan)", Options = GetPlayerTools(), CurrentOption = {"Tidak ada senjata"}, MultipleOptions = false, Flag = "RodSelect", Callback = function(Options) SelectedRod = Options[1] end,
+})
+FishTab:CreateButton({ Name = "Refresh Daftar Pancingan", Callback = function() RodDropdown:Refresh(GetPlayerTools(), true) end })
+
+FishTab:CreateSection("Fishing Settings")
+FishTab:CreateToggle({ Name = "Auto Fishing (Mancing Otomatis)", CurrentValue = false, Flag = "AutoFish", Callback = function(Value) AutoFishEnabled = Value end })
+
+FishTab:CreateSection("Filter Ikan")
+FishTab:CreateToggle({ Name = "Gunakan Filter Ikan", CurrentValue = false, Flag = "FishFilter", Callback = function(Value) FishFilterEnabled = Value end })
+
+local DaftarIkan = {
+    "Trout", "Swordfish"
+}
+FishTab:CreateDropdown({
+    Name = "Target", Options = DaftarIkan, CurrentOption = {}, MultipleOptions = true, Flag = "FishFilterList", Callback = function(Options) TargetFishList = Options end,
+})
+
+-- ==========================================
+-- LOOP 1: AUTO COLLECT CHEST (Prioritas Utama)
+-- ==========================================
+task.spawn(function()
+    while task.wait(0.5) do
+        local chestHRP, chestPrompt = nil, nil
+        
+        -- Cek Ship Chest dulu
+        if AutoChestEnabled then
+            chestHRP, chestPrompt = GetShipChest()
+        end
+        
+        -- Kalau Ship Chest tidak ada, cek Abandoned Chest
+        if not chestHRP and AutoChest2Enabled then
+            chestHRP, chestPrompt = GetAbandonedChest()
+        end
+        
+        -- Jika salah satu chest ditemukan
+        if chestHRP and chestPrompt then
+            IsCollectingChest = true 
+            
+            local character = LocalPlayer.Character
+            local hrp = character and character:FindFirstChild("HumanoidRootPart")
+            
+            if hrp then
+                -- Teleport ke atas chest
+                hrp.CFrame = chestHRP.CFrame + Vector3.new(0, 3, 0)
+                hrp.Velocity = Vector3.new(0,0,0)
+                
+                chestPrompt.HoldDuration = 0
+                if fireproximityprompt then
+                    fireproximityprompt(chestPrompt)
+                else
+                    chestPrompt:InputHoldBegin()
+                    task.wait(0.1)
+                    chestPrompt:InputHoldEnd()
+                end
+            end
+        else
+            IsCollectingChest = false
+        end
+    end
+end)
+
+-- ==========================================
+-- LOOP 2: AUTO KILL (SILENT AIM / REMOTE HIT)
+-- ==========================================
+RunService.Heartbeat:Connect(function()
+    if AutoKillEnabled and not IsCollectingChest then
+        local character = LocalPlayer.Character
+        local humanoid = character and character:FindFirstChild("Humanoid")
+        local hrp = character and character:FindFirstChild("HumanoidRootPart")
+        
+        if hrp and humanoid and humanoid.Health > 0 then
+            if CurrentDrop and CurrentDrop.Parent then
+                hrp.CFrame = CFrame.new(CurrentDrop.Position)
+                hrp.Velocity = Vector3.new(0,0,0)
+            elseif CurrentTarget and CurrentTarget.Parent then
+                local targetPos = CurrentTarget.Position
+                -- Teleport ke dekat monster (opsional, tapi bagus agar radius hit masuk akal)
+                hrp.CFrame = CFrame.lookAt(targetPos + Vector3.new(0, 15, 35), targetPos)
+                hrp.Velocity = Vector3.new(0,0,0) 
+            end
+        end
+    end
+end)
+
+task.spawn(function()
+    while task.wait() do
+        if IsCollectingChest then task.wait(1); continue end
+
+        if AutoKillEnabled then
+            local character = LocalPlayer.Character
+            local humanoid = character and character:FindFirstChild("Humanoid")
+            local hrp = character and character:FindFirstChild("HumanoidRootPart")
+            
+            if character and humanoid and humanoid.Health > 0 and hrp then
+                CurrentDrop = GetClosestDrop()
+                if CurrentDrop then
+                    CurrentTarget = nil
+                    local waitTime = 0
+                    while CurrentDrop and CurrentDrop.Parent and waitTime < 2.5 do
+                        if IsCollectingChest then break end 
+                        task.wait(0.1)
+                        waitTime = waitTime + 0.1
+                    end
+                    if CurrentDrop and CurrentDrop.Parent and AutoSellEnabled and not IsCollectingChest then
+                        SellEverything()
+                        task.wait(1) 
+                    end
+                else
+                    if not CurrentTarget or not CurrentTarget.Parent then
+                        CurrentTarget = GetClosestMob()
+                    end
+                    if CurrentTarget then
+                        local toolToUse = EquipTool(SelectedWeapon, Enum.KeyCode.Two)
+                        if toolToUse then
+                            -- Ambil model monsternya (karena CurrentTarget adalah Hitbox)
+                            local mobModel = CurrentTarget.Parent
+                            
+                            if mobModel then
+                                pcall(function()
+                                    local DataStreams = game:GetService("ReplicatedStorage").Shared.DataStreams
+                                    
+                                    -- 1. Tembakkan Remote Lempar (Menipu sistem anti-cheat agar terlihat lempar betulan)
+                                    if DataStreams:FindFirstChild("SpearThrown") then
+                                        DataStreams.SpearThrown:FireServer(
+                                            toolToUse.Name, 
+                                            hrp.CFrame, 
+                                            Vector3.new(0, 0, -1), 
+                                            tick()
+                                        )
+                                    end
+                                    
+                                    -- 2. Tembakkan Remote Hit (Instan Kill Aura)
+                                    if DataStreams:FindFirstChild("MonsterHit") then
+                                        DataStreams.MonsterHit:FireServer(
+                                            mobModel, 
+                                            toolToUse.Name, 
+                                            true
+                                        )
+                                    end
+                                end)
+                            end
+                            task.wait(1.2) -- Jeda tebasan (atur jadi 0.05 jika ingin lebih brutal)
+                        else
+                            task.wait(0.5)
+                        end
+                    else
+                        task.wait(1)
+                    end
+                end
+            else
+                CurrentTarget = nil
+                CurrentDrop = nil
+                task.wait(1)
+            end
+        else
+            CurrentTarget = nil
+            CurrentDrop = nil
+            task.wait(0.5)
+        end
+    end
+end)
+
+Wah, kamu benar-benar sudah masuk ke tahap advanced scripter! Urutan Remote Events yang kamu temukan (CastFishingLine -> FishBiting -> FishCaught -> ResetFishingRod) adalah formula sempurna untuk membuat Instant Auto Fish yang melewatinya (bypass) seluruh minigame dan deteksi UI layar.
+
+Karena kita akan menggunakan eksekusi langsung ke server, kode Auto Fishing yang panjang dan mengandalkan VirtualUser:ClickButton1 sebelumnya bisa dipangkas habis menjadi jauh lebih pendek, bersih, dan sangat cepat.
+
+Silakan timpa seluruh bagian LOOP 3: AUTO FISHING di paling bawah script kamu dengan versi "Instant" yang sudah saya rakit menggunakan remotes temuanmu:
+
+Lua
+-- ==========================================
+-- LOOP 3: INSTANT AUTO FISHING (REMOTE BYPASS)
+-- ==========================================
+task.spawn(function()
+    while task.wait() do
+        -- JIKA SEDANG MENGAMBIL CHEST, JEDA LOOP INI
+        if IsCollectingChest then task.wait(1); continue end
+
+        if AutoFishEnabled then
+            local character = LocalPlayer.Character
+            local humanoid = character and character:FindFirstChild("Humanoid")
+            
+            if character and humanoid and humanoid.Health > 0 then
+                local gui = LocalPlayer:FindFirstChild("PlayerGui")
+                local interface = gui and gui:FindFirstChild("Interface")
+                
+                -- Deteksi Tas Penuh
+                local isBackpackFull = false
+                if interface then
+                    local inventory = interface:FindFirstChild("Inventory")
+                    local quickAccess = inventory and inventory:FindFirstChild("QuickAccess")
+                    local backpackToggle = quickAccess and quickAccess:FindFirstChild("BackpackToggle")
+                    local inventoryCapacity = backpackToggle and backpackToggle:FindFirstChild("InventoryCapacity")
+                    
+                    if inventoryCapacity and inventoryCapacity:IsA("TextLabel") then
+                        local current, max = string.match(inventoryCapacity.Text, "(%d+)/(%d+)")
+                        if current and max then
+                            if tonumber(current) >= tonumber(max) then
+                                isBackpackFull = true
+                            end
+                        end
+                    end
+                end
+                
+                if isBackpackFull and AutoSellEnabled then
+                    SellEverything()
+                    humanoid:UnequipTools()
+                    task.wait(1.5) 
+                    continue 
+                end
+
+                -- Pastikan pancingan ter-equip
+                local rod = EquipTool(SelectedRod, Enum.KeyCode.One)
+                if not rod then 
+                    task.wait(1) 
+                    continue 
+                end
+
+                -- ==========================================
+                -- EKSEKUSI REMOTE INSTANT FISHING
+                -- ==========================================
+                pcall(function()
+                    local DataStreams = game:GetService("ReplicatedStorage").Shared.DataStreams
+                    
+                    -- 1. Lempar Pancingan
+                    if DataStreams:FindFirstChild("CastFishingLine") then
+                        DataStreams.CastFishingLine:FireServer()
+                    end
+                    task.wait(0.5) -- Jeda animasi agar tidak terdeteksi spam
+                    
+                    -- 2. Trigger Ikan Menyambar
+                    if DataStreams:FindFirstChild("FishBiting") then
+                        -- Perhatikan: Ini InvokeServer karena berbentuk RemoteFunction
+                        DataStreams.FishBiting:InvokeServer() 
+                    end
+                    task.wait(0.5) 
+                    
+                    -- 3. Tangkap Ikan Instan (Bypass Minigame Mover)
+                    if DataStreams:FindFirstChild("FishCaught") then
+                        DataStreams.FishCaught:FireServer()
+                    end
+                    task.wait(0.5) 
+                    
+                    -- 4. Reset Status Pancingan agar bisa melempar lagi
+                    if DataStreams:FindFirstChild("ResetFishingRod") then
+                        DataStreams.ResetFishingRod:FireServer(rod)
+                    end
+                end)
+                
+                -- Cooldown aman antar tarikan (bisa kamu perkecil kalau mau super cepat, misal 0.5)
+                task.wait(1)
+            else
+                task.wait(1) 
+            end
+        else
+            task.wait(0.5)
+        end
+    end
+end)
