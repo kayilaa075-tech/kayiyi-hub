@@ -109,18 +109,19 @@ local function EquipTool(ToolName, SlotNumber)
     local character = LocalPlayer.Character
     if not character then return nil end
 
+    -- Kalau sudah ada di tangan, langsung pakai
     local currentTool = character:FindFirstChild(ToolName)
     if currentTool then return currentTool end
     
-    local backpack = LocalPlayer:FindFirstChild("Backpack")
-    if backpack and backpack:FindFirstChild(ToolName) then
-        pcall(function()
-            game:GetService("ReplicatedStorage").Shared.DataStreams.SetEquippedItem:InvokeServer(SlotNumber)
-        end)
-        task.wait(0.2) 
-        
-        return character:FindFirstChild(ToolName)
-    end
+    -- LANGSUNG TEMBAK REMOTE TANPA BANYAK SYARAT
+    pcall(function()
+        game:GetService("ReplicatedStorage").Shared.DataStreams.SetEquippedItem:InvokeServer(SlotNumber)
+    end)
+    
+    task.wait(0.3) -- Beri waktu sedikit agar server memunculkan tool-nya di tangan karakter
+    
+    return character:FindFirstChild(ToolName)
+end
     
     return nil
 end
@@ -464,14 +465,14 @@ task.spawn(function()
                         end
                     end
                 end
-                
+
                 if isBackpackFull and AutoSellEnabled then
-                    -- MENGGUNAKAN REMOTE UNEQUIP
                     local currentTool = character:FindFirstChildWhichIsA("Tool")
                     if currentTool then
                         pcall(function()
                             game:GetService("ReplicatedStorage").Shared.DataStreams.UnequipTool:InvokeServer(currentTool)
                         end)
+                        task.wait(0.2)
                     end
 
                     SellEverything()
