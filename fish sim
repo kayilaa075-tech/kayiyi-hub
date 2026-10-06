@@ -377,7 +377,7 @@ task.spawn(function()
                                     end
                                 end)
                             end
-                            task.wait(1.5) -- Jeda tebasan (atur jadi 0.05 jika ingin lebih brutal)
+                            task.wait(1.2) -- Jeda tebasan (atur jadi 0.05 jika ingin lebih brutal)
                         else
                             task.wait(0.5)
                         end
