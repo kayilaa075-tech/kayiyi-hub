@@ -370,7 +370,7 @@ task.spawn(function()
                         CurrentTarget = GetClosestMob()
                     end
                     if CurrentTarget then
-                        -- Equip menggunakan Slot 2
+                        -- Equip menggunakan Slot 2 (Spear/Senjata)
                         local toolToUse = EquipTool(SelectedWeapon, 2)
                         if toolToUse then
                             local mobModel = CurrentTarget.Parent
@@ -444,29 +444,38 @@ task.spawn(function()
                     if inventoryCapacity and inventoryCapacity:IsA("TextLabel") then
                         local current, max = string.match(inventoryCapacity.Text, "(%d+)/(%d+)")
                         if current and max then
-                            if tonumber(current) >= tonumber(max) then
+                            -- Terjual ketika sisa 2 slot (misal: 98/100)
+                            if tonumber(current) >= (tonumber(max) - 2) then
                                 isBackpackFull = true
                             end
                         end
                     end
                 end
                 
-                if isBackpackFull and AutoSellEnabled then
-                    -- Unequip via Remote sebelum sell
-                    local currentTool = character:FindFirstChildWhichIsA("Tool")
-                    if currentTool then
-                        pcall(function()
-                            game:GetService("ReplicatedStorage").Shared.DataStreams.UnequipTool:InvokeServer(currentTool)
-                        end)
-                        task.wait(0.2)
-                    end
-
+if isBackpackFull and AutoSellEnabled then
+                    -- 1. Jual dulu semuanya
                     SellEverything()
-                    task.wait(1.5) 
+                    
+                    -- 2. Jeda 1 detik setelah terjual
+                    task.wait(1) 
+                    
+                    -- 3. PAKSA UNEQUIP FISIK DI LAYAR (Solusi Bug Pancingan Gaib)
+                    humanoid:UnequipTools() 
+                    
+                    -- 4. Baru tembak Remote Unequip ke Server
+                    local toolToUnequip = character:FindFirstChildWhichIsA("Tool") or LocalPlayer.Backpack:FindFirstChild(SelectedRod)
+                    if toolToUnequip then
+                        pcall(function()
+                            game:GetService("ReplicatedStorage").Shared.DataStreams.UnequipTool:InvokeServer(toolToUnequip)
+                        end)
+                    end
+                    
+                    -- 5. Jeda 1 detik lagi agar benar-benar bersih sebelum me-loop dan equip ulang
+                    task.wait(1) 
                     continue 
                 end
 
-                -- Equip menggunakan Slot 1
+                -- Equip menggunakan Slot 1 (Pancingan)
                 local rod = EquipTool(SelectedRod, 1)
                 if not rod then 
                     task.wait(1) 
